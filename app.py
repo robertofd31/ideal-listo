@@ -63,7 +63,7 @@ def get_image_base64(image_url):
 def analyze_image_with_openai(image_base64, room_type, api_key):
     try:
         # Configurar el cliente de OpenAI directamente en esta función
-        client = openai.OpenAI(api_key=api_key)
+        client = openai.OpenAI(api_key=st.secrets["openai"])
 
         prompt = f"""
         Analiza esta imagen de un {room_type} en una propiedad inmobiliaria.
