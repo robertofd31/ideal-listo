@@ -143,8 +143,8 @@ def analisis_manual(surface_area):
 
 # Intentar obtener las claves de los secretos, si no están disponibles, permitir entrada manual
 try:
-    default_openai_key = st.secrets["api_keys"]["openai"]
-    default_rapidapi_key = st.secrets["api_keys"]["rapidapi"]
+    default_openai_key = st.secrets["openai"]
+    default_rapidapi_key = st.secrets["rapidapi"]
     use_secrets = True
 except Exception:
     default_openai_key = ""
