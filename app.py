@@ -8,6 +8,7 @@ import base64
 import time
 from io import BytesIO
 from PIL import Image
+import streamlit as st
 
 # Cargar variables de entorno (para la API key de OpenAI)
 load_dotenv()
