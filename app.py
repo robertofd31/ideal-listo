@@ -141,10 +141,24 @@ def analisis_manual(surface_area):
     }
     return analisis
 
-# Interfaz de usuario
-api_key = st.sidebar.text_input("OpenAI API Key", type="password")
-rapidapi_key = st.sidebar.text_input("RapidAPI Key", type="password", value="aa2dd641d5msh2565cfba16fdf3cp172729jsn62ebc6b556b5")
+# Intentar obtener las claves de los secretos, si no están disponibles, permitir entrada manual
+try:
+    default_openai_key = st.secrets["api_keys"]["openai"]
+    default_rapidapi_key = st.secrets["api_keys"]["rapidapi"]
+    use_secrets = True
+except Exception:
+    default_openai_key = ""
+    default_rapidapi_key = "aa2dd641d5msh2565cfba16fdf3cp172729jsn62ebc6b556b5"
+    use_secrets = False
 
+# Opción para usar claves almacenadas o introducir manualmente
+if not use_secrets or st.sidebar.checkbox("Usar mis propias API keys", value=not use_secrets):
+    api_key = st.sidebar.text_input("OpenAI API Key", type="password", value=default_openai_key)
+    rapidapi_key = st.sidebar.text_input("RapidAPI Key", type="password", value=default_rapidapi_key)
+else:
+    api_key = default_openai_key
+    rapidapi_key = default_rapidapi_key
+    st.sidebar.success("Usando API keys almacenadas")
 # Entrada para la URL o ID del inmueble
 property_url = st.text_input("Introduce la URL o ID del inmueble de Idealista:", placeholder="https://www.idealista.com/inmueble/107442883/ o simplemente 107442883")
 
