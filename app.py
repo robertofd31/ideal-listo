@@ -21,7 +21,7 @@ st.set_page_config(
 st.title("Analizador de Inmuebles")
 st.markdown("Introduce el enlace o ID de un inmueble para analizar sus fotos y obtener un informe de reforma")
 
-# Cargar variables de entorno (para la API key de OpenAI)
+# Cargar variables de entorno
 load_dotenv()
 
 # Función para extraer el ID de la propiedad de una URL
@@ -141,24 +141,35 @@ def analisis_manual(surface_area):
     }
     return analisis
 
-# Intentar obtener las claves de los secretos, si no están disponibles, permitir entrada manual
-try:
-    default_openai_key = st.secrets["openai"]
-    default_rapidapi_key = st.secrets["rapidapi"]
-    use_secrets = True
-except Exception:
-    default_openai_key = ""
-    default_rapidapi_key = "aa2dd641d5msh2565cfba16fdf3cp172729jsn62ebc6b556b5"
-    use_secrets = False
+# Interfaz de usuario para las API keys
+st.sidebar.header("Configuración de API")
 
-# Opción para usar claves almacenadas o introducir manualmente
-if not use_secrets or st.sidebar.checkbox("Usar mis propias API keys", value=not use_secrets):
-    api_key = st.sidebar.text_input("OpenAI API Key", type="password", value=default_openai_key)
-    rapidapi_key = st.sidebar.text_input("RapidAPI Key", type="password", value=default_rapidapi_key)
-else:
-    api_key = default_openai_key
-    rapidapi_key = default_rapidapi_key
-    st.sidebar.success("Usando API keys almacenadas")
+# Intentar obtener claves de diferentes fuentes en orden de prioridad
+try:
+    # 1. Intentar obtener de Streamlit Secrets
+    openai_key = st.secrets["openai"]
+    rapidapi_key = st.secrets["rapidapi"]
+    st.sidebar.success("API keys cargadas desde Streamlit Secrets")
+except Exception:
+    try:
+        # 2. Intentar obtener de variables de entorno
+        openai_key = os.getenv("OPENAI_API_KEY", "")
+        rapidapi_key = os.getenv("RAPIDAPI_KEY", "aa2dd641d5msh2565cfba16fdf3cp172729jsn62ebc6b556b5")
+        if openai_key:
+            st.sidebar.success("API keys cargadas desde variables de entorno")
+        else:
+            openai_key = ""
+            st.sidebar.warning("No se encontraron API keys configuradas")
+    except Exception:
+        openai_key = ""
+        rapidapi_key = "aa2dd641d5msh2565cfba16fdf3cp172729jsn62ebc6b556b5"
+        st.sidebar.warning("No se encontraron API keys configuradas")
+
+# Permitir al usuario introducir o modificar las claves
+with st.sidebar.expander("Configurar API Keys", expanded=not openai_key):
+    api_key = st.text_input("OpenAI API Key", type="password", value=openai_key)
+    rapidapi_key = st.text_input("RapidAPI Key", type="password", value=rapidapi_key)
+
 # Entrada para la URL o ID del inmueble
 property_url = st.text_input("Introduce la URL o ID del inmueble de Idealista:", placeholder="https://www.idealista.com/inmueble/107442883/ o simplemente 107442883")
 
@@ -193,19 +204,29 @@ if st.button("Analizar inmueble"):
                     else:
                         property_data = response.json()
 
-                        # Extraer información básica
+                        # Extraer información básica con manejo de errores
                         try:
-                            surface_area = property_data["moreCharacteristics"]["constructedArea"]
-                            rooms = property_data["moreCharacteristics"]["roomNumber"]
-                            bathrooms = property_data["moreCharacteristics"]["bathNumber"]
-                            price = property_data["price"]
-                            address = property_data["address"]
-                            description = property_data["description"]
-                        except KeyError as e:
-                            st.warning(f"No se pudo extraer algún dato básico: {e}")
-                            surface_area = 0
-                            rooms = 0
-                            bathrooms = 0
+                            surface_area = property_data.get("moreCharacteristics", {}).get("constructedArea", 0)
+                            rooms = property_data.get("moreCharacteristics", {}).get("roomNumber", 0)
+                            bathrooms = property_data.get("moreCharacteristics", {}).get("bathNumber", 0)
+                            price = property_data.get("price", "No disponible")
+                            
+                            # Intentar obtener la dirección de diferentes maneras
+                            address = "No disponible"
+                            if "address" in property_data:
+                                address = property_data["address"]
+                            elif "location" in property_data:
+                                address = property_data["location"]
+                            
+                            # Intentar obtener la descripción
+                            description = property_data.get("description", "No disponible")
+                            
+                        except Exception as e:
+                            st.warning(f"No se pudieron extraer algunos datos básicos: {e}")
+                            # Valores por defecto
+                            surface_area = property_data.get("moreCharacteristics", {}).get("constructedArea", 80)
+                            rooms = property_data.get("moreCharacteristics", {}).get("roomNumber", 0)
+                            bathrooms = property_data.get("moreCharacteristics", {}).get("bathNumber", 0)
                             price = "No disponible"
                             address = "No disponible"
                             description = "No disponible"
@@ -220,11 +241,13 @@ if st.button("Analizar inmueble"):
                         with col3:
                             st.metric("Baños", bathrooms)
 
-                        st.subheader("Dirección")
-                        st.write(address)
+                        if address != "No disponible":
+                            st.subheader("Dirección")
+                            st.write(address)
 
-                        st.subheader("Descripción")
-                        st.write(description)
+                        if description != "No disponible":
+                            st.subheader("Descripción")
+                            st.write(description)
 
                         # Extraer URLs de las imágenes por tipo de habitación
                         images_by_room = {
@@ -237,14 +260,17 @@ if st.button("Analizar inmueble"):
                         }
 
                         try:
-                            for img in property_data["multimedia"]["images"]:
-                                room_type = img["localizedName"]
-                                if room_type in images_by_room:
-                                    images_by_room[room_type].append(img["url"])
-                                else:
-                                    images_by_room["Desconocido"].append(img["url"])
-                        except KeyError:
-                            st.warning("No se pudieron extraer las imágenes del inmueble.")
+                            if "multimedia" in property_data and "images" in property_data["multimedia"]:
+                                for img in property_data["multimedia"]["images"]:
+                                    room_type = img.get("localizedName", "Desconocido")
+                                    if room_type in images_by_room:
+                                        images_by_room[room_type].append(img.get("url", ""))
+                                    else:
+                                        images_by_room["Desconocido"].append(img.get("url", ""))
+                            else:
+                                st.warning("No se encontraron imágenes en los datos del inmueble.")
+                        except Exception as e:
+                            st.warning(f"Error al procesar las imágenes: {e}")
 
                         # Mostrar las imágenes por tipo de habitación
                         st.header("Imágenes del inmueble")
@@ -260,15 +286,16 @@ if st.button("Analizar inmueble"):
                                     # Mostrar las imágenes en una cuadrícula
                                     cols = st.columns(min(3, len(urls)))
                                     for j, url in enumerate(urls):
-                                        with cols[j % 3]:
-                                            st.image(url, caption=f"{room_type} {j+1}", use_column_width=True)
+                                        if url:  # Verificar que la URL no esté vacía
+                                            with cols[j % 3]:
+                                                st.image(url, caption=f"{room_type} {j+1}", use_column_width=True)
 
                         # Analizar las imágenes con OpenAI
                         st.header("Análisis de reforma")
 
                         with st.spinner("Analizando imágenes con IA..."):
                             try:
-                                # Configurar el cliente de OpenAI
+                                # Configurar el cliente de OpenAI (corregido)
                                 client = openai.OpenAI(api_key=api_key)
 
                                 # Diccionario para almacenar los resultados por tipo de habitación
@@ -311,7 +338,7 @@ if st.button("Analizar inmueble"):
                                         }
 
                                     current_room += 1
-                                    progress_bar.progress(current_room / total_rooms)
+                                    progress_bar.progress(current_room / total_rooms if total_rooms > 0 else 1.0)
 
                                 # Si no tenemos análisis para cocina, usar un valor por defecto
                                 if "cocina" not in room_analyses:
